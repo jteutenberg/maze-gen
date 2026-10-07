@@ -111,7 +111,7 @@ func bridgeGlyph(n *maze.Node) string {
 func glyph(mask int) (string, bool) {
 	switch mask {
 	case 0:
-		return " ", false
+		return "╬", false
 	case wallN:
 		return "╦", false
 	case wallS:
