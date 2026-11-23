@@ -28,6 +28,15 @@ func NewMixed(r *rand.Rand) maze.ExitAssigner {
 	return mixedAssigner{r: r}
 }
 
+// NewFixed places exits on the given positions and does not choose any.
+// border and interior are each nil, or exactly two positions. Nil disables
+// that kind of exit. When only one is set, those two nodes are the only
+// pair. When both are set, the pairs have the same shape as NewMixed:
+// border[0] with interior[0], and interior[1] with border[1].
+func NewFixed(border, interior []maze.Pos) maze.ExitAssigner {
+	return fixedAssigner{border: border, interior: interior}
+}
+
 type pairAssigner struct {
 	r        *rand.Rand
 	aOK      func(*maze.Node) bool
@@ -41,6 +50,60 @@ func (a pairAssigner) Assign(m *maze.Maze) error {
 		return err
 	}
 	return m.SetExitPairs([]maze.ExitPair{pair})
+}
+
+type fixedAssigner struct {
+	border   []maze.Pos
+	interior []maze.Pos
+}
+
+func (a fixedAssigner) Assign(m *maze.Maze) error {
+	border, err := fixedNodes(m, a.border, true)
+	if err != nil {
+		return err
+	}
+	interior, err := fixedNodes(m, a.interior, false)
+	if err != nil {
+		return err
+	}
+	switch {
+	case border != nil && interior != nil:
+		return m.SetExitPairs([]maze.ExitPair{
+			{A: border[0], B: interior[0]},
+			{A: interior[1], B: border[1]},
+		})
+	case border != nil:
+		return m.SetExitPairs([]maze.ExitPair{{A: border[0], B: border[1]}})
+	case interior != nil:
+		return m.SetExitPairs([]maze.ExitPair{{A: interior[0], B: interior[1]}})
+	default:
+		return fmt.Errorf("no exits")
+	}
+}
+
+func fixedNodes(m *maze.Maze, positions []maze.Pos, wantBorder bool) ([]*maze.Node, error) {
+	if positions == nil {
+		return nil, nil
+	}
+	if len(positions) != 2 {
+		return nil, fmt.Errorf("exit positions need two coordinates")
+	}
+	nodes := make([]*maze.Node, 2)
+	for i, p := range positions {
+		at := m.NodesAt(p.X, p.Y)
+		if len(at) == 0 {
+			return nil, fmt.Errorf("exit (%d,%d) is not in the maze", p.X, p.Y)
+		}
+		n := at[0]
+		if wantBorder && !n.Border {
+			return nil, fmt.Errorf("exit (%d,%d) is not on the border", n.X, n.Y)
+		}
+		if !wantBorder && n.Border {
+			return nil, fmt.Errorf("exit (%d,%d) is not interior", n.X, n.Y)
+		}
+		nodes[i] = n
+	}
+	return nodes, nil
 }
 
 type mixedAssigner struct {
